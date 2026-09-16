@@ -89,14 +89,29 @@ def orion_login(page):
 def coletar_orion(page):
     try: page.goto(URL_ORION_VENDAS, wait_until="domcontentloaded", timeout=60000)
     except: pass
+    time.sleep(5)
+    try: page.click('button:has-text("Buscar")', timeout=5000); time.sleep(5)
+    except: pass
+    try: page.wait_for_selector("table tbody tr", timeout=15000)
+    except: pass
     time.sleep(3)
-    try: page.click('button:has-text("Buscar")', timeout=5000); time.sleep(3)
-    except: pass
-    try: page.wait_for_selector("table tbody tr", timeout=10000)
-    except: pass
-    time.sleep(1)
 
+    # DEBUG: ver URL atual e titulo da pagina
+    print(f"  DEBUG URL: {page.url}")
+    print(f"  DEBUG Titulo: {page.title()}")
+    
+    # DEBUG: contar linhas
     linhas = page.query_selector_all("table tbody tr")
+    print(f"  DEBUG Linhas encontradas: {len(linhas)}")
+    
+    # DEBUG: ver primeiras celulas da primeira linha
+    if linhas:
+        try:
+            cels = linhas[0].query_selector_all("td")
+            tx = [c.inner_text().strip() for c in cels]
+            print(f"  DEBUG Primeira linha: {tx[:5]}")
+        except: pass
+
     montagem_ds  = []
     despacho_hub = []
 
@@ -123,18 +138,21 @@ def coletar_orion(page):
             if t is not None and 0 <= t < 120:
                 despacho_hub.append(t)
 
-    print(f"  OK Vendas: {len(montagem_ds)} montagens, {len(despacho_hub)} despachos")
+    print(f"  OK Vendas: {len(montagem_ds)} montagens DS Sion, {len(despacho_hub)} despachos")
 
     try: page.goto(URL_ORION_CANCEL, wait_until="domcontentloaded", timeout=60000)
     except: pass
-    time.sleep(3)
-    try: page.click('button:has-text("Buscar")', timeout=5000); time.sleep(3)
+    time.sleep(5)
+    try: page.click('button:has-text("Buscar")', timeout=5000); time.sleep(5)
     except: pass
     try: page.wait_for_selector("table tbody tr", timeout=8000)
     except: pass
-    time.sleep(1)
+    time.sleep(2)
 
-    cancelamentos = len(page.query_selector_all("table tbody tr"))
+    print(f"  DEBUG Cancel URL: {page.url}")
+    linhas_cancel = page.query_selector_all("table tbody tr")
+    print(f"  DEBUG Cancel linhas: {len(linhas_cancel)}")
+    cancelamentos = len(linhas_cancel)
     print(f"  OK Cancelamentos: {cancelamentos}")
 
     return {
