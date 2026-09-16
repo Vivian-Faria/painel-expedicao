@@ -13,7 +13,6 @@ SUPABASE_TABLE = "saude_operacional"
 
 URL_ORION_LOGIN  = "https://admin.orioncloudkitchens.com.br"
 URL_ORION_VENDAS = "https://admin.orioncloudkitchens.com.br/admin/reports/orders"
-URL_ORION_CANCEL = "https://admin.orioncloudkitchens.com.br/admin/reports/cancellations"
 ORION_EMAIL      = "orion"
 ORION_SENHA      = "orion@2021"
 
@@ -22,6 +21,10 @@ CHAT_USUARIO     = "Vívian Faria"
 CHAT_SENHA       = "Orion@123"
 
 
+
+# Indices das colunas (base 0): 0=Cod,1=Status,2=Motivo,3=Hub,4=Estab
+# 5=Cliente,6=Prod,7=Desc,8=Sub,9=Serv,10=Total,11=Cadastro,12=Pronto,13=Coleta,14=Retornado,15=Concluido
+IDX_STATUS=1; IDX_HUB=3; IDX_CADASTRO=11; IDX_PRONTO=12; IDX_COLETA=13; IDX_CONCLUIDO=15
 def parse_dt(v):
     if not v or v.strip() in ("-", "", "--"): return None
     for f in ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S"):
@@ -118,14 +121,14 @@ def coletar_orion(page):
     for linha in linhas:
         try: cels = linha.query_selector_all("td")
         except: continue
-        if len(cels) < 10: continue
+        if len(cels) < 12: continue
         tx = [c.inner_text().strip() for c in cels]
         try:
-            hub          = tx[1]
-            dt_cadastro  = parse_dt(tx[9])  if len(tx) > 9  else None
-            dt_pronto    = parse_dt(tx[10]) if len(tx) > 10 else None
-            dt_coleta    = parse_dt(tx[11]) if len(tx) > 11 else None
-            dt_conclusao = parse_dt(tx[13]) if len(tx) > 13 else None
+            hub = tx[IDX_HUB]
+            dt_cadastro = parse_dt(tx[IDX_CADASTRO])  if len(tx) > 9  else None
+            dt_pronto = parse_dt(tx[IDX_PRONTO]) if len(tx) > 10 else None
+            dt_coleta = parse_dt(tx[IDX_COLETA]) if len(tx) > 11 else None
+            dt_conclusao = parse_dt(tx[IDX_CONCLUIDO]) if len(tx) > 13 else None
         except IndexError: continue
 
         hub_lower = hub.lower().strip()
