@@ -11,9 +11,9 @@ SUPABASE_URL   = os.environ.get("SUPABASE_URL", "https://ogpfjrxawqerhoitcoxz.su
 SUPABASE_KEY   = os.environ.get("SUPABASE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ncGZqcnhhd3FlcmhvaXRjb3h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1NzMzODAsImV4cCI6MjEwNTE0OTM4MH0.eEEYrx-yOsbgjf4hOccAxP1ernzLUajzkbQByZo1vFI")
 SUPABASE_TABLE = "saude_operacional"
 
-URL_ORION_LOGIN  = "https://admin.orion.awfood.com.br"
-URL_ORION_VENDAS = "https://admin.orion.awfood.com.br/admin/reports/orders"
-URL_ORION_CANCEL = "https://admin.orion.awfood.com.br/admin/reports/cancellations"
+URL_ORION_LOGIN  = "https://admin.orioncloudkitchens.com.br"
+URL_ORION_VENDAS = "https://admin.orioncloudkitchens.com.br/admin/reports/orders"
+URL_ORION_CANCEL = "https://admin.orioncloudkitchens.com.br/admin/reports/cancellations"
 ORION_EMAIL      = "orion"
 ORION_SENHA      = "orion@2021"
 
