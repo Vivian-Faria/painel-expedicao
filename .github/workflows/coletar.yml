@@ -7,20 +7,22 @@ on:
 
 jobs:
   coletar:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
       - name: Checkout repositorio
         uses: actions/checkout@v4
+
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Instalar dependencias
         run: |
           pip install -r painel-op/github-repo/requirements.txt
-          playwright install chromium
-          playwright install-deps chromium
+          playwright install chromium --with-deps
+
       - name: Executar coleta
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
