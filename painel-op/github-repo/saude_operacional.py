@@ -17,7 +17,7 @@ ORION_EMAIL      = "orion"
 ORION_SENHA      = "orion@2021"
 
 URL_CHAT_LOGIN   = "https://app.chatpro.com.br"
-CHAT_USUARIO     = "Vívian Faria"
+CHAT_USUARIO   = "vivian@orioncloudkitchens.com.br"
 CHAT_SENHA       = "Orion@123"
 
 
