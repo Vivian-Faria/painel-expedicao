@@ -212,14 +212,9 @@ def coletar_chatpro(page):
         time.sleep(5)
         print("  OK Login ChatPro")
 
-        # Navegar para relatorios
-        seletores = ['a[href*="report"]','a[href*="relat"]','nav li:nth-child(5) a']
-        for sel in seletores:
-            try: page.click(sel, timeout=2000); break
-            except: pass
-        time.sleep(2)
+        page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="domcontentloaded", timeout=30000)
+        time.sleep(4)
 
-        # Filtrar hoje
         hoje = date.today().strftime("%Y-%m-%d")
         try:
             campos = page.query_selector_all('input[type="date"]')
@@ -227,29 +222,31 @@ def coletar_chatpro(page):
                 campos[0].fill(hoje)
                 campos[1].fill(hoje)
                 time.sleep(1)
-            try: page.click('button:has-text("Filtrar"), button:has-text("Buscar"), button:has-text("Aplicar")', timeout=3000)
-            except: pass
-            time.sleep(3)
+            for txt in ["Filtrar", "Buscar", "Aplicar"]:
+                try: page.click(f'button:has-text("{txt}")', timeout=2000); time.sleep(3); break
+                except: pass
         except: pass
 
-        # Coletar tempo de espera
         import re
         espera_min = None
         try:
             texto = page.inner_text('body')
-            idx = texto.find("Tempo médio de espera")
-            if idx >= 0:
-                trecho = texto[idx:idx+80]
-                matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
-                if matches:
-                    espera_min = parse_tempo_chatpro(matches[0])
+            for termo in ["Tempo medio de espera", "espera"]:
+                idx = texto.find(termo)
+                if idx >= 0:
+                    trecho = texto[idx:idx+60]
+                    print(f"  DEBUG ChatPro trecho:{trecho}")
+                    matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
+                    if matches:
+                        espera_min = parse_tempo_chatpro(matches[0])
+                        break
         except Exception as e:
-            print(f"  AVISO ChatPro: {e}")
+            print(f"  AVISO ChatPro:{e}")
 
-        print(f"  OK ChatPro espera: {espera_min} min")
+        print(f"  OK ChatPro espera:{espera_min} min")
         return {"espera_min": espera_min}
     except Exception as e:
-        print(f"  ERRO ChatPro: {e}")
+        print(f"  ERRO ChatPro:{e}")
         return {"espera_min": None}
 
 def main():
