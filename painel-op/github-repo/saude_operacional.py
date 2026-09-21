@@ -197,58 +197,59 @@ def coletar_orion(page):
 
 def coletar_chatpro(page):
     try:
-        # Usa contexto sem sinais de automacao
+        # Injeta scripts anti-deteccao antes de navegar
+        page.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
+            Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
+            window.chrome = {runtime: {}};
+        """)
+
         page.goto("https://app.chatpro.com.br/signin", wait_until="networkidle", timeout=60000)
         time.sleep(5)
 
-        # Aguarda inputs
-        try:
-            page.wait_for_selector('input[type="email"]', timeout=20000)
-        except:
-            try: page.wait_for_selector('input', timeout=10000)
-            except: pass
+        try: page.wait_for_selector('input[type="email"]', timeout=20000)
+        except: pass
         time.sleep(2)
 
-        # Preenche email clicando primeiro
+        # Clica e digita devagar simulando humano
         try:
             page.click('input[type="email"]')
-            time.sleep(0.5)
-            page.keyboard.type(CHAT_EMAIL, delay=50)
-        except:
-            ins = page.query_selector_all('input')
-            if ins:
-                ins[0].click()
-                page.keyboard.type(CHAT_EMAIL, delay=50)
+            time.sleep(0.3)
+            for char in CHAT_EMAIL:
+                page.keyboard.type(char)
+                time.sleep(0.08)
+        except Exception as e:
+            print(f"  DEBUG email error: {e}")
 
         time.sleep(0.5)
+        page.keyboard.press('Tab')
+        time.sleep(0.3)
 
-        # Preenche senha
         try:
-            page.click('input[type="password"]')
-            time.sleep(0.5)
-            page.keyboard.type(CHAT_SENHA, delay=50)
-        except:
-            ins = page.query_selector_all('input')
-            if len(ins) >= 2:
-                ins[1].click()
-                page.keyboard.type(CHAT_SENHA, delay=50)
+            for char in CHAT_SENHA:
+                page.keyboard.type(char)
+                time.sleep(0.08)
+        except Exception as e:
+            print(f"  DEBUG senha error: {e}")
 
         time.sleep(1)
 
-        # Submit
         try: page.click('button[type="submit"]', timeout=3000)
         except:
-            try: page.click('button:has-text("Entrar")', timeout=3000)
-            except: page.keyboard.press('Enter')
+            try: page.keyboard.press('Enter')
+            except: pass
 
-        # Aguarda redirect
-        try: page.wait_for_url(lambda url: 'signin' not in url, timeout=20000)
-        except: time.sleep(10)
-
+        time.sleep(12)
         print(f"  DEBUG pos-login URL: {page.url}")
         page.screenshot(path="chatpro_debug.png")
 
         if 'signin' in page.url:
+            # Tenta ver o erro na pagina
+            try:
+                erro = page.evaluate("() => document.body.innerText.slice(0,300)")
+                print(f"  DEBUG erro pagina: {erro}")
+            except: pass
             print("  ERRO ChatPro: login falhou")
             return {"espera_min": None}
 
@@ -261,8 +262,7 @@ def coletar_chatpro(page):
         try:
             resultado = page.evaluate("""() => {
                 const els = document.querySelectorAll('.rep-topics-data__h1');
-                const body = document.body ? document.body.innerText.slice(0, 300) : '';
-                return {els: Array.from(els).map(e => e.innerText), body: body};
+                return {els: Array.from(els).map(e => e.innerText)};
             }""")
             print(f"  DEBUG els: {resultado.get('els', [])}")
             for r in resultado.get('els', []):
