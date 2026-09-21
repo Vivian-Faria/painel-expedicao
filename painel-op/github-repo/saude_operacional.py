@@ -209,12 +209,14 @@ def coletar_chatpro(page):
             if len(ins) >= 2: ins[1].fill(CHAT_SENHA)
         try: page.click('button[type="submit"]')
         except: page.click('button')
-        time.sleep(5)
+        time.sleep(6)
         print("  OK Login ChatPro")
 
+        # Navega para relatorio de analise
         page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="domcontentloaded", timeout=30000)
-        time.sleep(4)
+        time.sleep(5)
 
+        # Filtra pelo dia atual
         hoje = date.today().strftime("%Y-%m-%d")
         try:
             campos = page.query_selector_all('input[type="date"]')
@@ -223,30 +225,46 @@ def coletar_chatpro(page):
                 campos[1].fill(hoje)
                 time.sleep(1)
             for txt in ["Filtrar", "Buscar", "Aplicar"]:
-                try: page.click(f'button:has-text("{txt}")', timeout=2000); time.sleep(3); break
+                try: page.click(f'button:has-text("{txt}")', timeout=2000); time.sleep(4); break
                 except: pass
         except: pass
 
         import re
         espera_min = None
+
+        # Estrategia 1: seletor direto pelo texto da pagina apos "Tempo medio de espera"
         try:
-            texto = page.inner_text('body')
-            for termo in ["Tempo medio de espera", "espera"]:
-                idx = texto.find(termo)
+            # Pega todos os elementos h1 com classe rep-topics-data__h1
+            els = page.query_selector_all('.rep-topics-data__h1')
+            if els:
+                # O primeiro h1 deve ser o tempo de espera
+                for el in els:
+                    texto = el.inner_text().strip()
+                    print(f"  DEBUG h1: {texto}")
+                    if re.match(r'\d{1,2}:\d{2}', texto):
+                        espera_min = parse_tempo_chatpro(texto)
+                        break
+        except Exception as e:
+            print(f"  AVISO seletor h1: {e}")
+
+        # Estrategia 2: busca pelo texto completo da pagina
+        if espera_min is None:
+            try:
+                texto_pag = page.inner_text('body')
+                idx = texto_pag.find("spera")
                 if idx >= 0:
-                    trecho = texto[idx:idx+60]
-                    print(f"  DEBUG ChatPro trecho:{trecho}")
+                    trecho = texto_pag[idx:idx+60]
+                    print(f"  DEBUG trecho: {trecho}")
                     matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
                     if matches:
                         espera_min = parse_tempo_chatpro(matches[0])
-                        break
-        except Exception as e:
-            print(f"  AVISO ChatPro:{e}")
+            except Exception as e:
+                print(f"  AVISO texto: {e}")
 
-        print(f"  OK ChatPro espera:{espera_min} min")
+        print(f"  OK ChatPro espera: {espera_min} min")
         return {"espera_min": espera_min}
     except Exception as e:
-        print(f"  ERRO ChatPro:{e}")
+        print(f"  ERRO ChatPro: {e}")
         return {"espera_min": None}
 
 def main():
