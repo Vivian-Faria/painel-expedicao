@@ -198,7 +198,7 @@ def coletar_orion(page):
 def coletar_chatpro(page):
     try:
         page.goto(URL_CHAT_LOGIN, wait_until="domcontentloaded", timeout=60000)
-        time.sleep(3)
+        time.sleep(4)
         try: page.fill('input[type="email"]', CHAT_USUARIO)
         except:
             ins = page.query_selector_all('input')
@@ -209,57 +209,32 @@ def coletar_chatpro(page):
             if len(ins) >= 2: ins[1].fill(CHAT_SENHA)
         try: page.click('button[type="submit"]')
         except: page.click('button')
-        time.sleep(6)
-        print("  OK Login ChatPro")
+        time.sleep(8)
+        print(f"  DEBUG pos-login URL: {page.url}")
+        page.screenshot(path="chatpro_login.png")
 
-        # Navega para relatorio de analise
         page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="domcontentloaded", timeout=30000)
-        time.sleep(5)
-
-        # Filtra pelo dia atual
-        hoje = date.today().strftime("%Y-%m-%d")
-        try:
-            campos = page.query_selector_all('input[type="date"]')
-            if len(campos) >= 2:
-                campos[0].fill(hoje)
-                campos[1].fill(hoje)
-                time.sleep(1)
-            for txt in ["Filtrar", "Buscar", "Aplicar"]:
-                try: page.click(f'button:has-text("{txt}")', timeout=2000); time.sleep(4); break
-                except: pass
-        except: pass
+        time.sleep(10)
+        print(f"  DEBUG reports URL: {page.url}")
+        page.screenshot(path="chatpro_reports.png")
 
         import re
         espera_min = None
 
-        # Estrategia 1: seletor direto pelo texto da pagina apos "Tempo medio de espera"
         try:
-            # Pega todos os elementos h1 com classe rep-topics-data__h1
-            els = page.query_selector_all('.rep-topics-data__h1')
-            if els:
-                # O primeiro h1 deve ser o tempo de espera
-                for el in els:
-                    texto = el.inner_text().strip()
-                    print(f"  DEBUG h1: {texto}")
-                    if re.match(r'\d{1,2}:\d{2}', texto):
-                        espera_min = parse_tempo_chatpro(texto)
-                        break
+            resultado = page.evaluate("""() => {
+                const els = document.querySelectorAll('.rep-topics-data__h1');
+                const body = document.body ? document.body.innerText.slice(0, 500) : 'sem body';
+                return {els: Array.from(els).map(e => e.innerText), body: body};
+            }""")
+            print(f"  DEBUG evaluate els: {resultado.get('els', [])}")
+            print(f"  DEBUG body slice: {resultado.get('body', '')[:200]}")
+            for r in resultado.get('els', []):
+                if re.match(r'\d{1,2}:\d{2}', str(r)):
+                    espera_min = parse_tempo_chatpro(str(r))
+                    break
         except Exception as e:
-            print(f"  AVISO seletor h1: {e}")
-
-        # Estrategia 2: busca pelo texto completo da pagina
-        if espera_min is None:
-            try:
-                texto_pag = page.inner_text('body')
-                idx = texto_pag.find("spera")
-                if idx >= 0:
-                    trecho = texto_pag[idx:idx+60]
-                    print(f"  DEBUG trecho: {trecho}")
-                    matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
-                    if matches:
-                        espera_min = parse_tempo_chatpro(matches[0])
-            except Exception as e:
-                print(f"  AVISO texto: {e}")
+            print(f"  AVISO evaluate: {e}")
 
         print(f"  OK ChatPro espera: {espera_min} min")
         return {"espera_min": espera_min}
