@@ -196,84 +196,81 @@ def coletar_orion(page):
     }
 
 def coletar_chatpro(page):
+    """
+    Coleta tempo medio de espera do ChatPro via Firebase Token + GraphQL Hasura.
+    Nao usa browser headless - usa API diretamente.
+    """
+    import re
     try:
-        # Injeta scripts anti-deteccao antes de navegar
-        page.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1,2,3]});
-            Object.defineProperty(navigator, 'languages', {get: () => ['pt-BR', 'pt']});
-            window.chrome = {runtime: {}};
-        """)
+        CHATPRO_REFRESH_TOKEN = os.environ.get("CHATPRO_REFRESH_TOKEN", "")
+        CHATPRO_API_KEY       = os.environ.get("CHATPRO_API_KEY", "AIzaSyCP_2g5Sm8I9FXgEzhD4-rA9jQqI3cCzWU")
+        CHATPRO_INSTANCE      = "chatpro-1e23402277"
 
-        page.goto("https://app.chatpro.com.br/signin", wait_until="networkidle", timeout=60000)
-        time.sleep(5)
-
-        try: page.wait_for_selector('input[type="email"]', timeout=20000)
-        except: pass
-        time.sleep(2)
-
-        # Clica e digita devagar simulando humano
-        try:
-            page.click('input[type="email"]')
-            time.sleep(0.3)
-            for char in CHAT_EMAIL:
-                page.keyboard.type(char)
-                time.sleep(0.08)
-        except Exception as e:
-            print(f"  DEBUG email error: {e}")
-
-        time.sleep(0.5)
-        page.keyboard.press('Tab')
-        time.sleep(0.3)
-
-        try:
-            for char in CHAT_SENHA:
-                page.keyboard.type(char)
-                time.sleep(0.08)
-        except Exception as e:
-            print(f"  DEBUG senha error: {e}")
-
-        time.sleep(1)
-
-        try: page.click('button[type="submit"]', timeout=3000)
-        except:
-            try: page.keyboard.press('Enter')
-            except: pass
-
-        time.sleep(12)
-        print(f"  DEBUG pos-login URL: {page.url}")
-        page.screenshot(path="chatpro_debug.png")
-
-        if 'signin' in page.url:
-            # Tenta ver o erro na pagina
-            try:
-                erro = page.evaluate("() => document.body.innerText.slice(0,300)")
-                print(f"  DEBUG erro pagina: {erro}")
-            except: pass
-            print("  ERRO ChatPro: login falhou")
+        if not CHATPRO_REFRESH_TOKEN:
+            print("  AVISO ChatPro: CHATPRO_REFRESH_TOKEN nao definido")
             return {"espera_min": None}
 
-        print("  OK Login ChatPro")
-        page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="networkidle", timeout=30000)
-        time.sleep(8)
+        # 1) Renova o accessToken via Firebase REST API
+        refresh_url = f"https://securetoken.googleapis.com/v1/token?key={CHATPRO_API_KEY}"
+        resp = requests.post(refresh_url, json={
+            "grant_type": "refresh_token",
+            "refresh_token": CHATPRO_REFRESH_TOKEN
+        }, timeout=15)
 
-        import re
+        if resp.status_code != 200:
+            print(f"  ERRO ChatPro refresh token: {resp.status_code} {resp.text[:100]}")
+            return {"espera_min": None}
+
+        token_data = resp.json()
+        access_token = token_data.get("access_token") or token_data.get("id_token")
+        print(f"  OK ChatPro token renovado")
+
+        # 2) Busca dados via GraphQL Hasura
+        hoje = date.today().isoformat()
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+            "x-hasura-instance-id": CHATPRO_INSTANCE,
+        }
+
+        # Query para buscar sessoes do dia e calcular tempo medio de espera
+        # Baseado na estrutura descoberta: tabela sessions com campos id, open, count
+        # O tempo de espera e calculado a partir dos dados de sessao
+        query = """
+        query GetSessionsStats {
+            sessions_aggregate {
+                aggregate {
+                    count
+                }
+            }
+            sessions(where: {open: {_eq: false}}, limit: 500) {
+                id
+                open
+                count
+            }
+        }
+        """
+
+        gql_resp = requests.post(
+            "https://gql.chatpro.com.br/v1/graphql",
+            headers=headers,
+            json={"query": query},
+            timeout=15
+        )
+
+        if gql_resp.status_code != 200:
+            print(f"  ERRO ChatPro GQL: {gql_resp.status_code}")
+            return {"espera_min": None}
+
+        data = gql_resp.json()
+        print(f"  DEBUG GQL: {str(data)[:200]}")
+
+        # Por enquanto retorna None - precisamos descobrir os campos corretos
+        # TODO: ajustar query quando soubermos os campos de wait_time
         espera_min = None
-        try:
-            resultado = page.evaluate("""() => {
-                const els = document.querySelectorAll('.rep-topics-data__h1');
-                return {els: Array.from(els).map(e => e.innerText)};
-            }""")
-            print(f"  DEBUG els: {resultado.get('els', [])}")
-            for r in resultado.get('els', []):
-                if re.match(r'\d{1,2}:\d{2}', str(r)):
-                    espera_min = parse_tempo_chatpro(str(r))
-                    break
-        except Exception as e:
-            print(f"  AVISO: {e}")
-
         print(f"  OK ChatPro espera: {espera_min} min")
         return {"espera_min": espera_min}
+
     except Exception as e:
         print(f"  ERRO ChatPro: {e}")
         return {"espera_min": None}
