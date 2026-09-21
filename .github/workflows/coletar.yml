@@ -28,3 +28,11 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: python painel-op/github-repo/saude_operacional.py
+
+      - name: Upload screenshots debug
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatpro-screenshots
+          path: "*.png"
+          if-no-files-found: ignore
