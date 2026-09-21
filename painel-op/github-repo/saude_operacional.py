@@ -99,20 +99,57 @@ def coletar_orion(page):
     except: pass
     time.sleep(3)
 
-    # Tabela 1 (resumo): le o numero de cancelamentos diretamente
+    # Tabela 2 (pedidos): conta cancelamentos por hub DS Sion + motivo de montagem
+    # Palavras que INCLUEM (erro de montagem):
+    MOTIVOS_MONTAGEM = [
+        "faltante","faltando","faltou","falta ","falta de item",
+        "item errado","item trocado","item incorreto","item diferente",
+        "produto errado","produto trocado","produto incorreto","produto diferente","produto faltando",
+        "quantidade errada","quantidade incorreta","a menos","a mais","quantidade diferente",
+        "pedido incompleto","incompleto","montagem","embalagem errada",
+        "troca","trocado","trocaram","errado","incorreto","faltou item",
+        "veio errado","veio faltando","veio a menos","veio diferente",
+        "enviado errado","item a menos","item a mais","pedido errado",
+    ]
+    # Palavras que EXCLUEM (nao e montagem):
+    MOTIVOS_EXCLUIR = [
+        "entrega","motoboy","entregador","courier",
+        "endereco","endereço","localizacao","localização","nao encontrou","nao encontrado",
+        "pagamento","troco","dinheiro","cartao","cartão","pix","maquina","maquininha",
+        "cancelado pelo cliente","desistencia","desistência","cliente cancelou","cliente desistiu",
+        "demora","tempo de espera","muito tempo","demorou","prazo",
+        "fechado","loja fechada","estabelecimento fechado",
+        "sistema","app","aplicativo","plataforma",
+    ]
+
+    def eh_cancel_montagem(motivo, hub):
+        if not motivo or not hub: return False
+        hub_lower = hub.lower().strip()
+        if "sion" not in hub_lower: return False
+        motivo_lower = motivo.lower()
+        for excluir in MOTIVOS_EXCLUIR:
+            if excluir in motivo_lower: return False
+        for incluir in MOTIVOS_MONTAGEM:
+            if incluir in motivo_lower: return True
+        return False
+
     cancelamentos = 0
     try:
         tabelas = page.query_selector_all("table")
-        if len(tabelas) >= 1:
-            linhas_resumo = tabelas[0].query_selector_all("tbody tr")
-            for lr in linhas_resumo:
-                cels = lr.query_selector_all("td")
-                if len(cels) >= 2:
-                    texto = cels[0].inner_text().strip().lower()
-                    if "cancel" in texto:
-                        try: cancelamentos = int(cels[1].inner_text().strip())
-                        except: pass
-        print(f"  OK Cancelamentos (tabela resumo): {cancelamentos}")
+        tabela_pedidos = tabelas[1] if len(tabelas) >= 2 else tabelas[0]
+        todas = tabela_pedidos.query_selector_all("tbody tr")
+        for linha in todas:
+            try:
+                cels = linha.query_selector_all("td")
+                if len(cels) < 5: continue
+                tx = [c.inner_text().strip() for c in cels]
+                status = tx[1].lower() if len(tx) > 1 else ""
+                motivo = tx[2] if len(tx) > 2 else ""
+                hub    = tx[3] if len(tx) > 3 else ""
+                if "cancel" in status and eh_cancel_montagem(motivo, hub):
+                    cancelamentos += 1
+            except: continue
+        print(f"  OK Cancelamentos DS Sion montagem: {cancelamentos}")
     except Exception as e:
         print(f"  AVISO cancelamentos: {e}")
 
