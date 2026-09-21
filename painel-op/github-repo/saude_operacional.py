@@ -197,56 +197,68 @@ def coletar_orion(page):
 
 def coletar_chatpro(page):
     try:
-        # Navega para signin e aguarda o SPA carregar
+        # Navega para signin aguardando JS carregar completamente
         page.goto("https://app.chatpro.com.br/signin", wait_until="networkidle", timeout=60000)
-        time.sleep(3)
+        time.sleep(5)
+        print(f"  DEBUG signin URL: {page.url}")
 
-        # Aguarda os campos de email e senha aparecerem
+        # Aguarda qualquer input aparecer (SPA demora para renderizar)
         try:
-            page.wait_for_selector('input[type="email"], input[type="text"]', timeout=15000)
-        except:
-            page.wait_for_selector('input', timeout=10000)
+            page.wait_for_selector('input', timeout=20000)
+        except Exception as e:
+            print(f"  DEBUG wait input: {e}")
+
         time.sleep(2)
 
-        # Preenche email
-        try:
-            page.fill('input[type="email"]', CHAT_USUARIO)
-        except:
-            try: page.fill('input[type="text"]', CHAT_USUARIO)
-            except:
-                ins = page.query_selector_all('input')
-                if ins: ins[0].fill(CHAT_USUARIO)
+        # Clica no primeiro input (email) e digita
+        inputs = page.query_selector_all('input')
+        print(f"  DEBUG inputs encontrados: {len(inputs)}")
+        for i, inp in enumerate(inputs):
+            tp = inp.get_attribute('type') or ''
+            print(f"  DEBUG input[{i}] type={tp}")
 
-        # Preenche senha
-        try:
-            page.fill('input[type="password"]', CHAT_SENHA)
-        except:
-            ins = page.query_selector_all('input')
-            senha_field = [i for i in ins if i.get_attribute('type') == 'password']
-            if senha_field: senha_field[0].fill(CHAT_SENHA)
-            elif len(ins) >= 2: ins[1].fill(CHAT_SENHA)
+        # Tenta preencher por tipo ou posicao
+        email_filled = False
+        senha_filled = False
 
+        for inp in inputs:
+            tp = (inp.get_attribute('type') or '').lower()
+            if tp in ('email', 'text') and not email_filled:
+                inp.click()
+                inp.fill(CHAT_USUARIO)
+                email_filled = True
+            elif tp == 'password' and not senha_filled:
+                inp.click()
+                inp.fill(CHAT_SENHA)
+                senha_filled = True
+
+        print(f"  DEBUG email_filled={email_filled} senha_filled={senha_filled}")
         time.sleep(1)
 
-        # Clica no botao de login
-        try:
-            page.click('button[type="submit"]', timeout=5000)
-        except:
-            try: page.click('button:has-text("Entrar")', timeout=3000)
-            except:
-                try: page.click('button:has-text("Login")', timeout=3000)
-                except: page.keyboard.press('Enter')
-
-        # Aguarda redirecionamento apos login
-        time.sleep(8)
-        print(f"  DEBUG pos-login URL: {page.url}")
-
-        # Se ainda estiver no signin, login falhou
-        if 'signin' in page.url:
-            print("  ERRO ChatPro: login falhou - ainda em signin")
-            # Tenta screenshot para debug
-            try: page.screenshot(path="chatpro_login_fail.png")
+        # Clica no botao de submit
+        submitted = False
+        for sel in ['button[type="submit"]', 'button:has-text("Entrar")', 'button:has-text("Login")', 'button:has-text("Acessar")']:
+            try:
+                page.click(sel, timeout=3000)
+                submitted = True
+                print(f"  DEBUG submit via: {sel}")
+                break
             except: pass
+
+        if not submitted:
+            # Tenta pressionar Enter no campo de senha
+            for inp in page.query_selector_all('input'):
+                if (inp.get_attribute('type') or '').lower() == 'password':
+                    inp.press('Enter')
+                    submitted = True
+                    break
+
+        time.sleep(10)
+        print(f"  DEBUG pos-submit URL: {page.url}")
+        page.screenshot(path="chatpro_debug.png")
+
+        if 'signin' in page.url:
+            print("  ERRO ChatPro: login falhou")
             return {"espera_min": None}
 
         print("  OK Login ChatPro")
@@ -254,31 +266,23 @@ def coletar_chatpro(page):
         # Navega para relatorio
         page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="networkidle", timeout=30000)
         time.sleep(8)
-        print(f"  DEBUG reports URL: {page.url}")
 
         import re
         espera_min = None
-
-        # Aguarda os dados carregarem
-        try:
-            page.wait_for_selector('.rep-topics-data__h1', timeout=15000)
-        except: pass
-        time.sleep(3)
-
         try:
             resultado = page.evaluate("""() => {
                 const els = document.querySelectorAll('.rep-topics-data__h1');
-                const body = document.body ? document.body.innerText.slice(0, 300) : '';
+                const body = document.body ? document.body.innerText.slice(0, 400) : '';
                 return {els: Array.from(els).map(e => e.innerText), body: body};
             }""")
             print(f"  DEBUG els: {resultado.get('els', [])}")
-            print(f"  DEBUG body: {resultado.get('body', '')[:150]}")
+            print(f"  DEBUG body: {resultado.get('body', '')[:200]}")
             for r in resultado.get('els', []):
                 if re.match(r'\d{1,2}:\d{2}', str(r)):
                     espera_min = parse_tempo_chatpro(str(r))
                     break
         except Exception as e:
-            print(f"  AVISO evaluate: {e}")
+            print(f"  AVISO: {e}")
 
         print(f"  OK ChatPro espera: {espera_min} min")
         return {"espera_min": espera_min}
