@@ -99,64 +99,56 @@ def coletar_orion(page):
     except: pass
     time.sleep(3)
 
-    # DEBUG: ver URL atual e titulo da pagina
-    print(f"  DEBUG URL: {page.url}")
-    print(f"  DEBUG Titulo: {page.title()}")
-    
-    # DEBUG: contar linhas
-    linhas = page.query_selector_all("table tbody tr")
-    print(f"  DEBUG Linhas encontradas: {len(linhas)}")
-    
-    # DEBUG: ver primeiras celulas da primeira linha
-    if linhas:
-        try:
-            cels = linhas[0].query_selector_all("td")
-            tx = [c.inner_text().strip() for c in cels]
-            print(f"  DEBUG Primeira linha: {tx[:5]}")
-        except: pass
+    # Tabela 1 (resumo): le o numero de cancelamentos diretamente
+    cancelamentos = 0
+    try:
+        tabelas = page.query_selector_all("table")
+        if len(tabelas) >= 1:
+            linhas_resumo = tabelas[0].query_selector_all("tbody tr")
+            for lr in linhas_resumo:
+                cels = lr.query_selector_all("td")
+                if len(cels) >= 2:
+                    texto = cels[0].inner_text().strip().lower()
+                    if "cancel" in texto:
+                        try: cancelamentos = int(cels[1].inner_text().strip())
+                        except: pass
+        print(f"  OK Cancelamentos (tabela resumo): {cancelamentos}")
+    except Exception as e:
+        print(f"  AVISO cancelamentos: {e}")
 
+    # Tabela 2 (pedidos): filtra apenas linhas com >= 15 colunas
     montagem_ds  = []
     despacho_hub = []
+    try:
+        tabelas = page.query_selector_all("table")
+        tabela_pedidos = tabelas[1] if len(tabelas) >= 2 else tabelas[0]
+        linhas = tabela_pedidos.query_selector_all("tbody tr")
+        print(f"  DEBUG Pedidos: {len(linhas)} linhas")
+        if linhas:
+            try:
+                cels = linhas[0].query_selector_all("td")
+                print(f"  DEBUG cols:{len(cels)} | {[c.inner_text().strip() for c in cels[:6]]}")
+            except: pass
 
-    for linha in linhas:
-        try: cels = linha.query_selector_all("td")
-        except: continue
-        if len(cels) < 12: continue
-        tx = [c.inner_text().strip() for c in cels]
-        try:
-            hub = tx[IDX_HUB]
-            dt_cadastro = parse_dt(tx[IDX_CADASTRO])  if len(tx) > 9  else None
-            dt_pronto = parse_dt(tx[IDX_PRONTO]) if len(tx) > 10 else None
-            dt_coleta = parse_dt(tx[IDX_COLETA]) if len(tx) > 11 else None
-            dt_conclusao = parse_dt(tx[IDX_CONCLUIDO]) if len(tx) > 13 else None
-        except IndexError: continue
-
-        hub_lower = hub.lower().strip()
-        if "sion" in hub_lower and dt_cadastro and dt_pronto:
-            t = diff_min(dt_cadastro, dt_pronto)
-            if t is not None and 0 <= t < 120:
-                montagem_ds.append(t)
-        if hub_lower in ("-", "", "none") and dt_coleta and dt_conclusao:
-            t = diff_min(dt_coleta, dt_conclusao)
-            if t is not None and 0 <= t < 120:
-                despacho_hub.append(t)
-
-    print(f"  OK Vendas: {len(montagem_ds)} montagens DS Sion, {len(despacho_hub)} despachos")
-
-    try: page.goto(URL_ORION_CANCEL, wait_until="domcontentloaded", timeout=60000)
-    except: pass
-    time.sleep(5)
-    try: page.click('button:has-text("Buscar")', timeout=5000); time.sleep(5)
-    except: pass
-    try: page.wait_for_selector("table tbody tr", timeout=8000)
-    except: pass
-    time.sleep(2)
-
-    print(f"  DEBUG Cancel URL: {page.url}")
-    linhas_cancel = page.query_selector_all("table tbody tr")
-    print(f"  DEBUG Cancel linhas: {len(linhas_cancel)}")
-    cancelamentos = len(linhas_cancel)
-    print(f"  OK Cancelamentos: {cancelamentos}")
+        for linha in linhas:
+            try: cels = linha.query_selector_all("td")
+            except: continue
+            if len(cels) < 15: continue
+            tx = [c.inner_text().strip() for c in cels]
+            hub = tx[3].lower().strip() if len(tx) > 3 else ""
+            dt_c = parse_dt(tx[11]) if len(tx) > 11 else None
+            dt_p = parse_dt(tx[12]) if len(tx) > 12 else None
+            dt_k = parse_dt(tx[13]) if len(tx) > 13 else None
+            dt_x = parse_dt(tx[15]) if len(tx) > 15 else None
+            if "sion" in hub and dt_c and dt_p:
+                t = diff_min(dt_c, dt_p)
+                if t is not None and 0 <= t < 120: montagem_ds.append(t)
+            if hub in ("-", "", "none") and dt_k and dt_x:
+                t = diff_min(dt_k, dt_x)
+                if t is not None and 0 <= t < 120: despacho_hub.append(t)
+        print(f"  OK {len(montagem_ds)} montagens DS Sion, {len(despacho_hub)} despachos")
+    except Exception as e:
+        print(f"  ERRO pedidos: {e}")
 
     return {
         "cancelamentos":  cancelamentos,
