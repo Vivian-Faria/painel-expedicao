@@ -270,7 +270,28 @@ async function fetchDados(){
     aplicar('cancel', d.cancelamentos, 1,  true,  fmtVal(d.cancelamentos),       'Periodo: 09h - '+d.hora_coleta);
     aplicar('montagem', d.montagem_ds,   3,  false, fmtVal(d.montagem_ds,true),     (d.montagem_count||0)+' pedidos DS Sion');
     aplicar('despacho', d.despacho_hub,  15, false, fmtVal(d.despacho_hub,true),    (d.despacho_count||0)+' pedidos cozinha');
-    aplicar('espera',   d.espera_min,    3,  false, fmtVal(d.espera_min,true),      '');
+    // ChatPro com turnos
+    var META_ESP = 3;
+    function corTurno(v){if(v===null||v===undefined)return'rgba(255,255,255,.2)';return v<=META_ESP?'#8aff5a':v<=META_ESP*1.5?'#ffcc44':'#ff5555';}
+    function badgeTurno(v){
+      if(v===null||v===undefined)return{txt:'--',bg:'rgba(255,255,255,.06)',cor:'rgba(255,255,255,.3)'};
+      if(v<=META_ESP)return{txt:'OK',bg:'rgba(138,255,90,.12)',cor:'#8aff5a'};
+      if(v<=META_ESP*1.5)return{txt:'Atencao',bg:'rgba(255,204,68,.12)',cor:'#ffcc44'};
+      return{txt:'Critico',bg:'rgba(255,85,85,.12)',cor:'#ff5555'};
+    }
+    var turno=d.turno_atual;
+    var espAtual=d.espera_min;
+    var tLabel=turno==='dia'?'☀ Turno Dia':turno==='noite'?'🌙 Turno Noite':'Turno atual';
+    var elTL=document.getElementById('turno-label');
+    if(elTL)elTL.textContent=tLabel;
+    aplicar('espera',espAtual,META_ESP,false,fmtVal(espAtual,true),'');
+    var vD=d.espera_dia_min, vN=d.espera_noite_min;
+    var elD=document.getElementById('val-dia'),elDB=document.getElementById('badge-dia');
+    var elN=document.getElementById('val-noite'),elNB=document.getElementById('badge-noite');
+    if(elD){elD.textContent=vD!=null?fmtVal(vD,true)+'min':'--';elD.style.color=corTurno(vD);}
+    if(elDB){var bd=badgeTurno(vD);elDB.textContent=bd.txt;elDB.style.background=bd.bg;elDB.style.color=bd.cor;}
+    if(elN){elN.textContent=vN!=null?fmtVal(vN,true)+'min':'--';elN.style.color=corTurno(vN);}
+    if(elNB){var bn=badgeTurno(vN);elNB.textContent=bn.txt;elNB.style.background=bn.bg;elNB.style.color=bn.cor;}
 
     document.getElementById('atualizado').textContent = 'Atualizado: '+(d.atualizado_em||'--');
     document.getElementById('sb-info').textContent    = 'Ultima atualizacao: '+(d.atualizado_em||'--')+' · Atualiza a cada 15 min';
