@@ -240,8 +240,7 @@ function aplicar(id, valor, meta, ehContagem, valorStr, base){
   document.getElementById('val-'+id).className    = 'card-valor '+status;
 
   var prog = document.getElementById('prog-'+id);
-  prog.className = 'card-progress-fill fill-'+status;
-  prog.style.width = pct+'%';
+  if(prog){ prog.className = 'card-progress-fill fill-'+status; prog.style.width = pct+'%'; }
 
   if(base) document.getElementById('base-'+id).textContent = base;
 
