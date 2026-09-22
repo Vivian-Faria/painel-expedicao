@@ -41,13 +41,16 @@ def media(vals):
     return round(sum(v)/len(v), 2) if v else None
 
 def parse_tempo_chatpro(s):
+    # Formato ChatPro: HH:MM (horas:minutos) ou HH:MM:SS
     if not s or s.strip() in ("-", "", "--"): return None
     try:
         partes = s.strip().split(":")
         if len(partes) == 2:
-            return int(partes[0]) + int(partes[1])/60
+            # HH:MM -> converte para minutos
+            return int(partes[0]) * 60 + int(partes[1])
         if len(partes) == 3:
-            return int(partes[0])*60 + int(partes[1]) + int(partes[2])/60
+            # HH:MM:SS -> converte para minutos
+            return int(partes[0]) * 60 + int(partes[1]) + int(partes[2])/60
     except: pass
     return None
 
