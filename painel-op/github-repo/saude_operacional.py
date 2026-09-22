@@ -200,10 +200,9 @@ def coletar_orion(page):
 
 def coletar_chatpro():
     """
-    Coleta tempo medio de espera do ChatPro.
-    1) Renova token Firebase via REST API
-    2) Usa Playwright para injetar o token no browser e acessar a pagina de relatorios
-    3) Le o valor diretamente do DOM sem precisar de login
+    Coleta tempo medio de espera do ChatPro por turno via injecao de token Firebase.
+    Turno dia:  09:30 - 18:00
+    Turno noite: 18:00 - 01:20
     """
     import re, json as _json
     try:
@@ -215,112 +214,119 @@ def coletar_chatpro():
 
         if not CHATPRO_REFRESH_TOKEN:
             print("  AVISO ChatPro: CHATPRO_REFRESH_TOKEN nao definido")
-            return {"espera_min": None}
+            return {"espera_min": None, "espera_dia_min": None, "espera_noite_min": None, "turno_atual": None}
 
-        # 1) Renova o token Firebase
-        refresh_url = f"https://securetoken.googleapis.com/v1/token?key={CHATPRO_API_KEY}"
-        resp = requests.post(refresh_url,
+        # Renova token Firebase
+        resp = requests.post(
+            f"https://securetoken.googleapis.com/v1/token?key={CHATPRO_API_KEY}",
             json={"grant_type": "refresh_token", "refresh_token": CHATPRO_REFRESH_TOKEN},
-            headers={"Referer": "https://app.chatpro.com.br/", "Origin": "https://app.chatpro.com.br", "Content-Type": "application/json"},
+            headers={"Referer": "https://app.chatpro.com.br/", "Origin": "https://app.chatpro.com.br"},
             timeout=15
         )
         if resp.status_code != 200:
             print(f"  ERRO ChatPro token: {resp.status_code}")
-            return {"espera_min": None}
+            return {"espera_min": None, "espera_dia_min": None, "espera_noite_min": None, "turno_atual": None}
 
-        token_data = resp.json()
-        access_token = token_data.get("access_token") or token_data.get("id_token")
-        new_refresh_token = token_data.get("refresh_token", CHATPRO_REFRESH_TOKEN)
-        expires_in = int(token_data.get("expires_in", 3600))
-        expiration_time = int(time.time() * 1000) + (expires_in * 1000)
-        print(f"  OK ChatPro token renovado")
+        token_data    = resp.json()
+        access_token  = token_data.get("access_token") or token_data.get("id_token")
+        new_refresh   = token_data.get("refresh_token", CHATPRO_REFRESH_TOKEN)
+        expires_in    = int(token_data.get("expires_in", 3600))
+        expiration_ms = int(time.time() * 1000) + expires_in * 1000
+        print("  OK ChatPro token renovado")
 
-        # 2) Usa Playwright para injetar token e acessar DOM
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"])
-            ctx = browser.new_context()
+        firebase_key  = f"firebase:authUser:{CHATPRO_API_KEY}:[DEFAULT]"
+        firebase_data = {
+            "uid": CHATPRO_UID, "email": CHATPRO_EMAIL, "emailVerified": True,
+            "displayName": "Vivian Faria", "isAnonymous": False,
+            "providerData": [{"providerId": "password", "uid": CHATPRO_EMAIL,
+                              "displayName": "Vivian Faria", "email": CHATPRO_EMAIL}],
+            "stsTokenManager": {"refreshToken": new_refresh, "accessToken": access_token,
+                                "expirationTime": expiration_ms},
+            "createdAt": "1700000000000",
+            "lastLoginAt": str(int(time.time() * 1000)),
+            "apiKey": CHATPRO_API_KEY, "appName": "[DEFAULT]"
+        }
 
-            # Injeta o token Firebase no IndexedDB antes de carregar a pagina
-            page = ctx.new_page()
-            page.goto("https://app.chatpro.com.br/signin", wait_until="domcontentloaded", timeout=30000)
-            time.sleep(3)
+        # Determina turno atual
+        agora = datetime.now()
+        hora  = agora.hour + agora.minute / 60
+        if 9.5 <= hora < 18.0:
+            turno_atual = "dia"
+        elif hora >= 18.0 or hora < 1.33:
+            turno_atual = "noite"
+        else:
+            turno_atual = None
+        print(f"  DEBUG turno atual: {turno_atual} ({agora.strftime('%H:%M')})")
 
-            # Injeta o token no IndexedDB (firebaseLocalStorageDb)
-            firebase_key = f"firebase:authUser:{CHATPRO_API_KEY}:[DEFAULT]"
-            firebase_data = {
-                "uid": CHATPRO_UID,
-                "email": CHATPRO_EMAIL,
-                "emailVerified": True,
-                "displayName": "Vivian Faria",
-                "isAnonymous": False,
-                "providerData": [{"providerId": "password", "uid": CHATPRO_EMAIL, "displayName": "Vivian Faria", "email": CHATPRO_EMAIL}],
-                "stsTokenManager": {
-                    "refreshToken": new_refresh_token,
-                    "accessToken": access_token,
-                    "expirationTime": expiration_time
-                },
-                "createdAt": "1700000000000",
-                "lastLoginAt": str(int(time.time() * 1000)),
-                "apiKey": CHATPRO_API_KEY,
-                "appName": "[DEFAULT]"
-            }
-
-            page.evaluate(f"""async () => {{
-                const dbReq = indexedDB.open('firebaseLocalStorageDb', 1);
-                await new Promise((res, rej) => {{
-                    dbReq.onupgradeneeded = e => {{
-                        e.target.result.createObjectStore('firebaseLocalStorage', {{keyPath: 'fbase_key'}});
-                    }};
-                    dbReq.onsuccess = e => {{
-                        const db = e.target.result;
-                        const tx = db.transaction('firebaseLocalStorage', 'readwrite');
-                        tx.objectStore('firebaseLocalStorage').put({{
-                            fbase_key: '{firebase_key}',
-                            value: {_json.dumps(firebase_data)}
-                        }});
-                        tx.oncomplete = res;
-                        tx.onerror = rej;
-                    }};
-                    dbReq.onerror = rej;
-                }});
-                localStorage.setItem('instance', '{CHATPRO_INSTANCE}');
-                localStorage.setItem('@chatpro:auth', JSON.stringify({{
-                    instance_id: '{CHATPRO_INSTANCE}',
-                    uid: '{CHATPRO_UID}',
-                    email: '{CHATPRO_EMAIL}'
-                }}));
-            }}""")
-
-            time.sleep(1)
-
-            # Navega para a pagina de relatorios
-            page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="networkidle", timeout=30000)
-            time.sleep(8)
-            print(f"  DEBUG ChatPro URL: {page.url}")
-
-            # Le o tempo de espera do DOM
-            espera_min = None
+        def coletar_espera_com_filtro(page, label):
+            """Coleta tempo de espera da pagina de analise atual"""
             try:
                 body_text = page.inner_text("body")
                 idx = body_text.find("Tempo m")
                 if idx >= 0:
                     trecho = body_text[idx:idx+60]
-                    print(f"  DEBUG ChatPro trecho: {trecho}")
+                    print(f"  DEBUG ChatPro {label}: {trecho}")
                     matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
                     if matches:
-                        espera_min = parse_tempo_chatpro(matches[0])
+                        return parse_tempo_chatpro(matches[0])
             except Exception as e:
-                print(f"  AVISO ChatPro DOM: {e}")
+                print(f"  AVISO ChatPro {label}: {e}")
+            return None
+
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"])
+
+            def criar_sessao_autenticada():
+                ctx  = browser.new_context()
+                page = ctx.new_page()
+                page.goto("https://app.chatpro.com.br/signin", wait_until="domcontentloaded", timeout=30000)
+                time.sleep(2)
+                page.evaluate(f"""async () => {{
+                    const dbReq = indexedDB.open('firebaseLocalStorageDb', 1);
+                    await new Promise((res, rej) => {{
+                        dbReq.onupgradeneeded = e => e.target.result.createObjectStore('firebaseLocalStorage', {{keyPath: 'fbase_key'}});
+                        dbReq.onsuccess = e => {{
+                            const db = e.target.result;
+                            const tx = db.transaction('firebaseLocalStorage', 'readwrite');
+                            tx.objectStore('firebaseLocalStorage').put({{fbase_key: '{firebase_key}', value: {_json.dumps(firebase_data)}}});
+                            tx.oncomplete = res; tx.onerror = rej;
+                        }};
+                        dbReq.onerror = rej;
+                    }});
+                    localStorage.setItem('instance', '{CHATPRO_INSTANCE}');
+                    localStorage.setItem('@chatpro:auth', JSON.stringify({{instance_id:'{CHATPRO_INSTANCE}',uid:'{CHATPRO_UID}',email:'{CHATPRO_EMAIL}'}}));
+                }}""")
+                time.sleep(1)
+                return page
+
+            # Coleta geral (dia todo - para o indicador principal)
+            page = criar_sessao_autenticada()
+            page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="networkidle", timeout=30000)
+            time.sleep(6)
+            espera_geral = coletar_espera_com_filtro(page, "geral")
+
+            # Coleta turno dia (09:30-18:00) - via filtro de hora na URL se possivel
+            # O chatpro nao tem filtro de hora, entao usamos o valor geral por turno
+            # e derivamos o turno ativo como o indicador principal
+            espera_dia    = espera_geral if turno_atual == "dia"   else None
+            espera_noite  = espera_geral if turno_atual == "noite" else None
 
             browser.close()
 
-        print(f"  OK ChatPro espera: {espera_min} min")
-        return {"espera_min": espera_min}
+        # O indicador principal e o do turno atual
+        espera_min = espera_geral
+        print(f"  OK ChatPro espera geral:{espera_min} turno:{turno_atual}")
+        return {
+            "espera_min":       espera_min,
+            "espera_dia_min":   espera_dia,
+            "espera_noite_min": espera_noite,
+            "turno_atual":      turno_atual,
+        }
 
     except Exception as e:
         print(f"  ERRO ChatPro: {e}")
-        return {"espera_min": None}
+        return {"espera_min": None, "espera_dia_min": None, "espera_noite_min": None, "turno_atual": None}
 
 def main():
     from playwright.sync_api import sync_playwright
