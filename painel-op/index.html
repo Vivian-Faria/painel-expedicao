@@ -154,20 +154,36 @@ header{background:#060606;padding:14px 28px;display:flex;align-items:center;just
     </div>
   </div>
 
-  <!-- ESPERA CHATPRO -->
+  <!-- ESPERA CHATPRO COM TURNOS -->
   <div class="card nd" id="card-espera">
     <div class="card-icon">💬</div>
     <div class="card-head">
-      <div class="card-titulo">Tempo medio de espera<br>ChatPro (cliente → atendimento)</div>
+      <div class="card-titulo">Tempo medio de espera<br>ChatPro · <span id="turno-label">--</span></div>
       <span class="card-badge badge-nd" id="badge-espera">--</span>
     </div>
     <div>
       <div class="card-valor nd" id="val-espera">--<span class="card-unidade">min</span></div>
-      <div class="card-progress"><div class="card-progress-fill fill-nd" id="prog-espera" style="width:0%"></div></div>
     </div>
     <div class="card-foot">
-      <div class="card-meta">Meta: ate <strong>3 minutos</strong></div>
-      <div class="card-base" id="base-espera"></div>
+      <div style="width:100%">
+        <div class="card-meta" style="margin-bottom:8px">Meta: ate <strong>3 minutos</strong> por turno</div>
+        <div style="display:flex;gap:12px;width:100%">
+          <div style="flex:1;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px">
+            <div style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">☀ Dia 09:30–18:00</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span id="val-dia" style="font-size:18px;font-weight:700;color:rgba(255,255,255,.2)">--</span>
+              <span id="badge-dia" style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.3)">--</span>
+            </div>
+          </div>
+          <div style="flex:1;background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px">
+            <div style="font-size:9px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🌙 Noite 18:00–01:20</div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span id="val-noite" style="font-size:18px;font-weight:700;color:rgba(255,255,255,.2)">--</span>
+              <span id="badge-noite" style="font-size:9px;padding:2px 7px;border-radius:10px;background:rgba(255,255,255,.06);color:rgba(255,255,255,.3)">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
