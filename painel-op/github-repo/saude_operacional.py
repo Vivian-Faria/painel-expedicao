@@ -212,10 +212,15 @@ def coletar_chatpro(page):
 
         # 1) Renova o accessToken via Firebase REST API
         refresh_url = f"https://securetoken.googleapis.com/v1/token?key={CHATPRO_API_KEY}"
-        resp = requests.post(refresh_url, json={
-            "grant_type": "refresh_token",
-            "refresh_token": CHATPRO_REFRESH_TOKEN
-        }, timeout=15)
+        resp = requests.post(refresh_url,
+            json={"grant_type": "refresh_token", "refresh_token": CHATPRO_REFRESH_TOKEN},
+            headers={
+                "Referer": "https://app.chatpro.com.br/",
+                "Origin": "https://app.chatpro.com.br",
+                "Content-Type": "application/json"
+            },
+            timeout=15
+        )
 
         if resp.status_code != 200:
             print(f"  ERRO ChatPro refresh token: {resp.status_code} {resp.text[:100]}")
