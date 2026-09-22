@@ -195,7 +195,7 @@ def coletar_orion(page):
         "despacho_count": len(despacho_hub),
     }
 
-def coletar_chatpro(page):
+def coletar_chatpro():
     """
     Coleta tempo medio de espera do ChatPro via Firebase Token + GraphQL Hasura.
     Nao usa browser headless - usa API diretamente.
@@ -295,30 +295,27 @@ def main():
         "espera_min":     None,
     }
 
+    # Coleta Orion via Playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(
             headless=True,
             args=["--no-sandbox","--disable-dev-shm-usage"]
         )
-
-        page_orion = browser.new_context().new_page()
+        pg = browser.new_context().new_page()
         try:
-            orion_login(page_orion)
-            resultado.update(coletar_orion(page_orion))
+            orion_login(pg)
+            resultado.update(coletar_orion(pg))
         except Exception as e:
             print(f"  ERRO Orion: {e}")
         finally:
-            page_orion.close()
+            pg.close()
+            browser.close()
 
-        page_chat = browser.new_context().new_page()
-        try:
-            resultado.update(coletar_chatpro(page_chat))
-        except Exception as e:
-            print(f"  ERRO ChatPro: {e}")
-        finally:
-            page_chat.close()
-
-        browser.close()
+    # Coleta ChatPro via API Firebase (sem browser - sem reCAPTCHA)
+    try:
+        resultado.update(coletar_chatpro())
+    except Exception as e:
+        print(f"  ERRO ChatPro: {e}")
 
     enviar_supabase(resultado)
     print(f"  OK Resultado: {resultado}")
