@@ -197,82 +197,121 @@ def coletar_orion(page):
 
 def coletar_chatpro():
     """
-    Coleta tempo medio de espera do ChatPro via Firebase Token + GraphQL Hasura.
-    Nao usa browser headless - usa API diretamente.
+    Coleta tempo medio de espera do ChatPro.
+    1) Renova token Firebase via REST API
+    2) Usa Playwright para injetar o token no browser e acessar a pagina de relatorios
+    3) Le o valor diretamente do DOM sem precisar de login
     """
-    import re
+    import re, json as _json
     try:
         CHATPRO_REFRESH_TOKEN = os.environ.get("CHATPRO_REFRESH_TOKEN", "")
         CHATPRO_API_KEY       = os.environ.get("CHATPRO_API_KEY", "AIzaSyCP_2g5Sm8I9FXgEzhD4-rA9jQqI3cCzWU")
         CHATPRO_INSTANCE      = "chatpro-1e23402277"
+        CHATPRO_UID           = "QGrXo11mnkXDsL80xcAMvUSVme62"
+        CHATPRO_EMAIL         = "vivian@orioncloudkitchens.com.br"
 
         if not CHATPRO_REFRESH_TOKEN:
             print("  AVISO ChatPro: CHATPRO_REFRESH_TOKEN nao definido")
             return {"espera_min": None}
 
-        # 1) Renova o accessToken via Firebase REST API
+        # 1) Renova o token Firebase
         refresh_url = f"https://securetoken.googleapis.com/v1/token?key={CHATPRO_API_KEY}"
         resp = requests.post(refresh_url,
             json={"grant_type": "refresh_token", "refresh_token": CHATPRO_REFRESH_TOKEN},
-            headers={
-                "Referer": "https://app.chatpro.com.br/",
-                "Origin": "https://app.chatpro.com.br",
-                "Content-Type": "application/json"
-            },
+            headers={"Referer": "https://app.chatpro.com.br/", "Origin": "https://app.chatpro.com.br", "Content-Type": "application/json"},
             timeout=15
         )
-
         if resp.status_code != 200:
-            print(f"  ERRO ChatPro refresh token: {resp.status_code} {resp.text[:100]}")
+            print(f"  ERRO ChatPro token: {resp.status_code}")
             return {"espera_min": None}
 
         token_data = resp.json()
         access_token = token_data.get("access_token") or token_data.get("id_token")
+        new_refresh_token = token_data.get("refresh_token", CHATPRO_REFRESH_TOKEN)
+        expires_in = int(token_data.get("expires_in", 3600))
+        expiration_time = int(time.time() * 1000) + (expires_in * 1000)
         print(f"  OK ChatPro token renovado")
 
-        # 2) Busca dados via GraphQL Hasura
-        hoje = date.today().isoformat()
-        headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-            "x-hasura-instance-id": CHATPRO_INSTANCE,
-        }
+        # 2) Usa Playwright para injetar token e acessar DOM
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox","--disable-dev-shm-usage"])
+            ctx = browser.new_context()
 
-        # Query para buscar sessoes do dia e calcular tempo medio de espera
-        # Baseado na estrutura descoberta: tabela sessions com campos id, open, count
-        # O tempo de espera e calculado a partir dos dados de sessao
-        query = """
-        query GetSessionsStats {
-            sessions_aggregate {
-                aggregate {
-                    count
-                }
+            # Injeta o token Firebase no IndexedDB antes de carregar a pagina
+            page = ctx.new_page()
+            page.goto("https://app.chatpro.com.br/signin", wait_until="domcontentloaded", timeout=30000)
+            time.sleep(3)
+
+            # Injeta o token no IndexedDB (firebaseLocalStorageDb)
+            firebase_key = f"firebase:authUser:{CHATPRO_API_KEY}:[DEFAULT]"
+            firebase_data = {
+                "uid": CHATPRO_UID,
+                "email": CHATPRO_EMAIL,
+                "emailVerified": True,
+                "displayName": "Vivian Faria",
+                "isAnonymous": False,
+                "providerData": [{"providerId": "password", "uid": CHATPRO_EMAIL, "displayName": "Vivian Faria", "email": CHATPRO_EMAIL}],
+                "stsTokenManager": {
+                    "refreshToken": new_refresh_token,
+                    "accessToken": access_token,
+                    "expirationTime": expiration_time
+                },
+                "createdAt": "1700000000000",
+                "lastLoginAt": str(int(time.time() * 1000)),
+                "apiKey": CHATPRO_API_KEY,
+                "appName": "[DEFAULT]"
             }
-            sessions(where: {open: {_eq: false}}, limit: 500) {
-                id
-                open
-                count
-            }
-        }
-        """
 
-        gql_resp = requests.post(
-            "https://gql.chatpro.com.br/v1/graphql",
-            headers=headers,
-            json={"query": query},
-            timeout=15
-        )
+            page.evaluate(f"""async () => {{
+                const dbReq = indexedDB.open('firebaseLocalStorageDb', 1);
+                await new Promise((res, rej) => {{
+                    dbReq.onupgradeneeded = e => {{
+                        e.target.result.createObjectStore('firebaseLocalStorage', {{keyPath: 'fbase_key'}});
+                    }};
+                    dbReq.onsuccess = e => {{
+                        const db = e.target.result;
+                        const tx = db.transaction('firebaseLocalStorage', 'readwrite');
+                        tx.objectStore('firebaseLocalStorage').put({{
+                            fbase_key: '{firebase_key}',
+                            value: {_json.dumps(firebase_data)}
+                        }});
+                        tx.oncomplete = res;
+                        tx.onerror = rej;
+                    }};
+                    dbReq.onerror = rej;
+                }});
+                localStorage.setItem('instance', '{CHATPRO_INSTANCE}');
+                localStorage.setItem('@chatpro:auth', JSON.stringify({{
+                    instance_id: '{CHATPRO_INSTANCE}',
+                    uid: '{CHATPRO_UID}',
+                    email: '{CHATPRO_EMAIL}'
+                }}));
+            }}""")
 
-        if gql_resp.status_code != 200:
-            print(f"  ERRO ChatPro GQL: {gql_resp.status_code}")
-            return {"espera_min": None}
+            time.sleep(1)
 
-        data = gql_resp.json()
-        print(f"  DEBUG GQL: {str(data)[:200]}")
+            # Navega para a pagina de relatorios
+            page.goto("https://app.chatpro.com.br/reports/analysis", wait_until="networkidle", timeout=30000)
+            time.sleep(8)
+            print(f"  DEBUG ChatPro URL: {page.url}")
 
-        # Por enquanto retorna None - precisamos descobrir os campos corretos
-        # TODO: ajustar query quando soubermos os campos de wait_time
-        espera_min = None
+            # Le o tempo de espera do DOM
+            espera_min = None
+            try:
+                body_text = page.inner_text("body")
+                idx = body_text.find("Tempo m")
+                if idx >= 0:
+                    trecho = body_text[idx:idx+60]
+                    print(f"  DEBUG ChatPro trecho: {trecho}")
+                    matches = re.findall(r'\d{1,2}:\d{2}(?::\d{2})?', trecho)
+                    if matches:
+                        espera_min = parse_tempo_chatpro(matches[0])
+            except Exception as e:
+                print(f"  AVISO ChatPro DOM: {e}")
+
+            browser.close()
+
         print(f"  OK ChatPro espera: {espera_min} min")
         return {"espera_min": espera_min}
 
